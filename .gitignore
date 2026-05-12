@@ -8,6 +8,8 @@ env/
 venv/
 .env/
 
+.env.development
+
 # VS Code and IDE settings
 .vscode/
 .idea/
@@ -16,6 +18,8 @@ venv/
 .DS_Store
 Thumbs.db
 
-# Environment variables
-.env
-.env.*
+# Generated runtime data
+data/
+*.sqlite3
+
+downloads/rfps/*.pdf
