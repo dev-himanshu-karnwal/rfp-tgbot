@@ -1,3 +1,10 @@
-BOT_TOKEN = "8762085854:AAGbuxLWWZdei5X2SSp47aIXSP6Jg3HHK6o"
+from dotenv import load_dotenv
+import os
 
-API_KEY = "AIzaSyDzzqIC3ltMK4j0y7FRaqUxAOJ2RHe7Lww"
+load_dotenv(".env.development")
+
+class Config:
+    # Telegram Bot Token
+    TELEGRAM_BOT_TOKEN = os.getenv('BOT_TOKEN')
+    # Gemini API Key
+    GEMINI_API_KEY = os.getenv('API_KEY')

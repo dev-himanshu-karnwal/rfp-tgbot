@@ -1,10 +1,10 @@
 from google import genai
 import asyncio
 from google.genai import errors
-from config import API_KEY
+from config import Config
 
 # Configure API Key
-client = genai.Client(api_key=API_KEY)
+client = genai.Client(api_key=Config.GEMINI_API_KEY)
 
 # async def analyze_rfp(prompt):
     # retries = 3

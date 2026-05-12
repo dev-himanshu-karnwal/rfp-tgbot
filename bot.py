@@ -2,7 +2,7 @@ import os
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters
 import pdfplumber
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from config import  BOT_TOKEN
+from config import Config
 from prompt import start_prompt, help_prompt, classifier_prompt, rfp_prompt, fallback_prompt
 from flash_model import analyze_rfp
 
@@ -84,7 +84,7 @@ async def text_extract(pdf_path):
 def split_message(message, chunk_size=4096):
     return [message[i:i+chunk_size] for i in range(0, len(message), chunk_size)]
 
-app = ApplicationBuilder().token(BOT_TOKEN).build()
+app = ApplicationBuilder().token(Config.TELEGRAM_BOT_TOKEN).build()
 app.add_handler(CommandHandler("start", start_command))
 app.add_handler(CommandHandler("help", help_command))
 app.add_handler(
