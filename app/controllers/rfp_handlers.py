@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import json
+import logging
 import re
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
@@ -129,6 +132,7 @@ def _parse_callback(data: str) -> tuple[str, int] | None:
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.info("start_command invoked by user=%s", update.effective_user and update.effective_user.id)
     if not update.message:
         return
     await update.message.reply_text("Processing your request. Please wait...")
@@ -138,6 +142,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    logger.info("help_command invoked by user=%s", update.effective_user and update.effective_user.id)
     if not update.message:
         return
     await update.message.reply_text("Processing your request. Please wait...")
@@ -157,10 +162,15 @@ async def _ingest_and_reply(
     temp_pdf_path: Path | None,
     original_filename: str | None,
 ) -> None:
+    logger.info(
+        "_ingest_and_reply: user=%s chat=%s message=%s filename=%s text_len=%d",
+        user_id, chat_id, message_id, original_filename, len(extracted),
+    )
     cleaned = extracted.strip()
     if caption:
         cleaned = f"Caption: {caption}\n\n{cleaned}"
     if len(cleaned) < 40:
+        logger.warning("Extracted text too short (%d chars), aborting ingest", len(cleaned))
         await update.message.reply_text(
             "Could not extract enough text from this document. "
             "Try a clearer PDF or paste the RFP as text."
@@ -169,11 +179,13 @@ async def _ingest_and_reply(
             temp_pdf_path.unlink(missing_ok=True)
         return
 
+    logger.info("Summarising RFP text (%d chars)…", len(cleaned))
     ingest = await summarize_rfp_json(cleaned)
     score = ingest_fit_score(ingest)
     summary_json = json.dumps(ingest, ensure_ascii=False)
     raw_email = ingest.get("client_email")
     email = raw_email.strip() if isinstance(raw_email, str) else None
+    logger.info("RFP summarised — score=%s email=%s", score, email)
 
     job_id = _jobs.create(
         telegram_message_id=message_id,
@@ -186,6 +198,7 @@ async def _ingest_and_reply(
         email=email,
         status="received",
     )
+    logger.info("Job created: job_id=%s", job_id)
 
     final_path: Path | None = None
     if temp_pdf_path and temp_pdf_path.is_file():
@@ -216,11 +229,18 @@ async def on_private_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     user_id = update.effective_user.id
     session = _sessions.get(user_id)
+    logger.info(
+        "on_private_message: user=%s step=%s job=%s",
+        user_id,
+        session and session.current_step,
+        session and session.current_job_id,
+    )
 
     if session and session.current_step == "awaiting_edit_prompt" and session.current_job_id:
         job = _jobs.get(session.current_job_id)
         if job and update.message.text:
             notes = update.message.text.strip()
+            logger.info("Regenerating proposal for job=%s with edit prompt", session.current_job_id)
             await update.message.reply_text("Regenerating proposal draft…")
             draft = await generate_proposal_draft_json(
                 rfp_summary=job.summary or "",
@@ -255,6 +275,7 @@ async def on_private_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
             raw = update.message.text.strip()
             m = re.search(r"[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}", raw)
             new_email = m.group(0) if m else raw
+            logger.info("Email updated for job=%s to=%s", session.current_job_id, new_email)
             _jobs.update(session.current_job_id, email=new_email, status="pdf_ready")
             _sessions.upsert_session(
                 user_id,
@@ -280,6 +301,7 @@ async def on_private_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
     text = update.message.text or ""
 
     if doc and doc.mime_type == "application/pdf":
+        logger.info("PDF document received: filename=%s size=%s", doc.file_name, doc.file_size)
         await update.message.reply_text("Processing your RFP. Please wait…")
         Config.ensure_data_dirs()
         temp = Config.RFPS_DIR / f"pending_{update.message.message_id}.pdf"
@@ -300,6 +322,7 @@ async def on_private_message(update: Update, context: ContextTypes.DEFAULT_TYPE)
 
     if text.strip():
         cat = await classify_intent(text)
+        logger.info("Intent classified as '%s' for user=%s", cat, user_id)
         if cat.startswith("RFP"):
             await update.message.reply_text("Processing your RFP. Please wait…")
             await _ingest_and_reply(
@@ -358,17 +381,21 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     await query.answer()
     parsed = _parse_callback(query.data)
     if not parsed:
+        logger.warning("Unparseable callback data: %s", query.data)
         return
 
     action, job_id = parsed
     user_id = query.from_user.id
+    logger.info("callback_router: action=%s job_id=%s user=%s", action, job_id, user_id)
     job = _jobs.get(job_id)
     if not job or job.user_id != user_id:
+        logger.warning("Invalid callback — job not found or user mismatch (job_id=%s user=%s)", job_id, user_id)
         if query.message:
             await query.message.reply_text("This action is no longer valid.")
         return
 
     if action == "rj":
+        logger.info("Job %s rejected by user=%s", job_id, user_id)
         _jobs.update(job_id, status="rejected")
         _sessions.upsert_session(user_id, current_job_id=None, current_step=None, pending_input=None)
         if query.message:
@@ -376,6 +403,7 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
     if action == "gp":
+        logger.info("Generating proposal draft for job=%s", job_id)
         if query.message:
             await query.message.reply_text("Generating proposal draft…")
         draft = await generate_proposal_draft_json(
@@ -399,8 +427,10 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
     if action == "pdf":
+        logger.info("Generating PDF for job=%s", job_id)
         data = loads_proposal(job.proposal_text)
         if not data:
+            logger.warning("No proposal draft found for job=%s", job_id)
             await query.message.reply_text("No proposal draft found. Generate a draft first.")
             return
         await query.message.reply_text("Generating PDF…")
@@ -439,7 +469,9 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
     if action == "se":
+        logger.info("Send email requested for job=%s", job_id)
         if not job.email:
+            logger.warning("No email on file for job=%s", job_id)
             await query.message.reply_text("No email on file. Use Edit Email first.")
             return
         _jobs.update(job_id, status="awaiting_email_confirm")
@@ -455,10 +487,13 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
     if action == "cf":
+        logger.info("Confirm send for job=%s to=%s", job_id, job.email)
         if job.status != "awaiting_email_confirm":
+            logger.warning("Confirm called but job=%s status=%s", job_id, job.status)
             await query.message.reply_text("Nothing to confirm for this job.")
             return
         if not email_service.smtp_configured():
+            logger.error("SMTP not configured — cannot send email")
             await query.message.reply_text(
                 "Email is not configured. Set SMTP_HOST, SMTP_FROM, SMTP_USER, SMTP_PASSWORD."
             )
@@ -475,8 +510,10 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
                 attachment_path=pdf_path if pdf_path.is_file() else None,
             )
         except Exception as e:
+            logger.exception("Email send failed for job=%s: %s", job_id, e)
             await query.message.reply_text(f"Send failed: {e}")
             return
+        logger.info("Email sent successfully for job=%s to=%s", job_id, job.email)
         _jobs.update(job_id, status="sent")
         _sessions.upsert_session(user_id, current_job_id=None, current_step="sent")
         await query.edit_message_text("✅ Email Sent Successfully")
@@ -493,8 +530,10 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
 
     if action == "dl":
+        logger.info("Download PDF requested for job=%s", job_id)
         path = proposal_pdf_path(job_id)
         if not path.is_file():
+            logger.warning("PDF file not found at %s for job=%s", path, job_id)
             await query.message.reply_text("PDF not found. Tap Generate PDF first.")
             return
         await query.message.reply_document(document=str(path), filename=path.name)
@@ -502,6 +541,7 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
 
 def register_handlers(application: Application) -> None:
+    logger.info("Registering RFP bot handlers")
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CallbackQueryHandler(callback_router))
