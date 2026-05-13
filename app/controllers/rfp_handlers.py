@@ -102,7 +102,7 @@ def _keyboard_step3(job_id: int) -> InlineKeyboardMarkup:
                 InlineKeyboardButton("Send Email", callback_data=f"se:{job_id}"),
                 InlineKeyboardButton("Edit Email", callback_data=f"ee:{job_id}"),
             ],
-            [InlineKeyboardButton("Download PDF", callback_data=f"dl:{job_id}")],
+            [InlineKeyboardButton("View PDF", callback_data=f"dl:{job_id}")],
         ]
     )
 
@@ -364,17 +364,20 @@ async def callback_router(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     user_id = query.from_user.id
     job = _jobs.get(job_id)
     if not job or job.user_id != user_id:
-        await query.edit_message_text("This action is no longer valid.")
+        if query.message:
+            await query.message.reply_text("This action is no longer valid.")
         return
 
     if action == "rj":
         _jobs.update(job_id, status="rejected")
         _sessions.upsert_session(user_id, current_job_id=None, current_step=None, pending_input=None)
-        await query.edit_message_text("Rejected. Send another RFP anytime.")
+        if query.message:
+            await query.message.reply_text("Rejected. Send another RFP anytime.")
         return
 
     if action == "gp":
-        await query.edit_message_text("Generating proposal draft…")
+        if query.message:
+            await query.message.reply_text("Generating proposal draft…")
         draft = await generate_proposal_draft_json(
             rfp_summary=job.summary or "",
             rfp_excerpt=(job.extracted_text or "")[:24_000],

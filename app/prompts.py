@@ -1,7 +1,7 @@
 """Prompts for LLM calls (refactored from root `prompt.py`)."""
 
 INGEST_RFP_JSON_PROMPT = """
-You are an AI analyst for DCT Infotech (https://dctinfotech.com). Summarize the following RFP or business document.
+You are an AI analyst for DCT Technology (https://dctinfotech.com). Summarize the following RFP or business document.
 
 Return ONLY valid JSON (no markdown fences, no commentary) with this exact shape:
 {{
@@ -13,7 +13,7 @@ Return ONLY valid JSON (no markdown fences, no commentary) with this exact shape
 }}
 
 Rules:
-- fit_score must be a JSON number from 0 to 10 (decimals allowed) reflecting how well DCT Infotech fits this opportunity.
+- fit_score must be a JSON number from 0 to 10 (decimals allowed) reflecting how well DCT Technology fits this opportunity.
 - summary must be short bullets (max 5).
 - If a field is unknown, use null or empty array as appropriate.
 
@@ -22,7 +22,7 @@ DOCUMENT TEXT:
 """
 
 PROPOSAL_DRAFT_PROMPT = """
-You are a proposal writer for DCT Infotech (https://dctinfotech.com).
+You are a proposal writer for DCT Technology (https://dctinfotech.com).
 
 Write a concise **email proposal draft** (not a PDF) responding to this RFP context.
 
@@ -43,13 +43,13 @@ ADDITIONAL USER INSTRUCTIONS (may be empty):
 """
 
 CLASSIFIER_PROMPT = """
-You are an intent classification system for DCT Infotech RFP Assistant.
+You are an intent classification system for DCT Technology RFP Assistant.
 
 Classify the user message into ONE category only.
 
 CATEGORIES:
 1. RFP — business proposals, requirements, scope, budgets, deadlines
-2. COMPANY_QUERY — questions about DCT Infotech services or company
+2. COMPANY_QUERY — questions about DCT Technology services or company
 3. GENERAL_QUERY — other questions
 4. OTHER — greetings, noise, unclear
 
@@ -62,7 +62,7 @@ MESSAGE:
 """
 
 FALLBACK_PROMPT = """
-You are an AI assistant for DCT Infotech (https://dctinfotech.com), a software development company.
+You are an AI assistant for DCT Technology (https://dctinfotech.com), a software development company.
 
 Handle the message helpfully and concisely. Do not force RFP format unless the input is clearly an RFP.
 
@@ -71,13 +71,13 @@ USER MESSAGE:
 """
 
 START_PROMPT = """
-You are the assistant for DCT Infotech (https://dctinfotech.com).
+You are the assistant for DCT Technology (https://dctinfotech.com).
 
 Respond with a short onboarding message for /start: what this bot does (RFP intake from forwarded PDF or text, summary + fit score, proposal flow), friendly and brief.
 """
 
 HELP_PROMPT = """
-You are the assistant for DCT Infotech (https://dctinfotech.com).
+You are the assistant for DCT Technology (https://dctinfotech.com).
 
 Respond with a short /help: steps (send PDF, review summary, generate proposal draft, PDF, optional email), concise bullets.
 """
